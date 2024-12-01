@@ -18,6 +18,7 @@
 - [x] Calculate frame time 
 - [x] Compute Shaders 
 - [x] Game of Life Simulation 
-- [ ] Draw primitives to screen 
-- [ ] API to Draw different primitives each frame
+- [x] Draw lines and points to screen 
+- [x] Draw shapes to screen 
+- [x] Simple API to Draw different primitives each frame
  

@@ -18,13 +18,16 @@ use winit::{
     window::{Window, WindowAttributes},
 };
 
-use crate::primitives::GRID_SIZE;
 use crate::render_context::RenderContext;
+use crate::render_state::RenderState;
 
 const FPS_CAP: f32 = 20.;
 
 impl<'a> App<'a> {
-    pub fn init(window_attributes: Option<WindowAttributes>) -> App<'a> {
+    pub fn init(
+        window_attributes: Option<WindowAttributes>,
+        render_state: Option<RenderState>,
+    ) -> App<'a> {
         let window_attributes = match window_attributes {
             Some(w) => w,
             None => WindowAttributes::default(),
@@ -34,6 +37,7 @@ impl<'a> App<'a> {
             window: None,
             render_ctx: None,
             frame_time: Instant::now(),
+            render_state,
         };
 
         app.init_eventloop_and_window();
@@ -83,90 +87,10 @@ impl<'a> App<'a> {
             label: Some("Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
         });
-        const WORKGROUP_SIZE: u8 = 8;
-        let compute_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Game of life simulation"),
-            source: wgpu::ShaderSource::Wgsl(
-                r#"
-                    @group(0) @binding(0) var<uniform> grid: vec2f;
-                    @group(0) @binding(1) var<storage> cell_state_in: array<u32>;
-                    @group(0) @binding(2) var<storage, read_write> cell_state_out: array<u32>;
-
-                    fn cellIndex(cell: vec2u) -> u32 {
-                        return (cell.y % u32(grid.y)) * u32(grid.x) + (cell.x % u32(grid.x));
-                    }
-                    fn cellActive(x: u32, y: u32) -> u32 {
-                        return cell_state_in[cellIndex(vec2(x, y))];
-                    }
-                    @compute @workgroup_size(8,8)
-                    fn compute_main(@builtin(global_invocation_id) cell: vec3u) {
-                    // getting count of active neighbors 
-                        let active_neighbors = cellActive(cell.x+1, cell.y+1) +
-                            cellActive(cell.x+1, cell.y) +
-                            cellActive(cell.x+1, cell.y-1) +
-                            cellActive(cell.x, cell.y-1) +
-                            cellActive(cell.x-1, cell.y-1) +
-                            cellActive(cell.x-1, cell.y) +
-                            cellActive(cell.x-1, cell.y+1) +
-                            cellActive(cell.x, cell.y+1);
-
-                        let i = cellIndex(cell.xy);
-                        switch active_neighbors{
-                            case 2u:{
-                                cell_state_out[i] = cell_state_in[i];
-                            }
-                            case 3u:{
-                                cell_state_out[i] = 1u;
-                            }
-                            default:{
-                                cell_state_out[i] = 0u;
-                            }
-                        }
-                    }
-            "#
-                .into(),
-            ),
-        });
-
-        let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            label: Some("Bind Group Layout"),
-            entries: &[
-                BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: ShaderStages::VERTEX | ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: ShaderStages::VERTEX | ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: ShaderStages::VERTEX | ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-            ],
-        });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
-            bind_group_layouts: &[&bind_group_layout], // even though there are two bind groups, only one is used at a time so only one layout is necessary
+            bind_group_layouts: &[], // even though there are two bind groups, only one is used at a time so only one layout is necessary
             push_constant_ranges: &[],
         });
 
@@ -224,90 +148,17 @@ impl<'a> App<'a> {
             multiview: None,
         });
 
-        let compute_pipeline = device.create_compute_pipeline(&ComputePipelineDescriptor {
-            label: Some("Compute Pipeline"),
-            layout: Some(&pipeline_layout),
-            module: &compute_shader,
-            entry_point: "compute_main",
-            compilation_options: Default::default(),
-        });
-
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(crate::primitives::VERTICES),
+            contents: bytemuck::cast_slice(self.render_state.as_ref().unwrap().vertices.as_slice()),
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(crate::primitives::INDICES),
-            usage: wgpu::BufferUsages::INDEX,
-        });
-
-        let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Uniform Buffer"),
-            contents: bytemuck::cast_slice(crate::primitives::UNIFORM_ARRAY),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
-
-        let cell_state_array = &mut [0u32; (GRID_SIZE * GRID_SIZE) as usize];
-        let mut rng = rand::thread_rng();
-        for val in cell_state_array.iter_mut() {
-            let rng_val: u8 = rng.gen_range(0..100);
-            *val = if rng_val > 60 { 1 } else { 0 };
-        }
-
-        let cell_storage_buffers = [
-            device.create_buffer_init(&BufferInitDescriptor {
-                label: Some("Cell storage buffer A"),
-                contents: bytemuck::cast_slice(cell_state_array),
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            }),
-            device.create_buffer_init(&BufferInitDescriptor {
-                label: Some("Cell storage buffer B"),
-                contents: bytemuck::cast_slice(cell_state_array),
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            }),
-        ];
-
-        let bind_groups = [
-            device.create_bind_group(&BindGroupDescriptor {
-                label: Some("Uniform and Storage Bind Group A"),
-                layout: &render_pipeline.get_bind_group_layout(0),
-                entries: &[
-                    BindGroupEntry {
-                        binding: 0,
-                        resource: uniform_buffer.as_entire_binding(),
-                    },
-                    BindGroupEntry {
-                        binding: 1,
-                        resource: cell_storage_buffers[0].as_entire_binding(),
-                    },
-                    BindGroupEntry {
-                        binding: 2,
-                        resource: cell_storage_buffers[1].as_entire_binding(),
-                    },
-                ],
-            }),
-            device.create_bind_group(&BindGroupDescriptor {
-                label: Some("Uniform and Storage Bind Group B"),
-                layout: &render_pipeline.get_bind_group_layout(0),
-                entries: &[
-                    BindGroupEntry {
-                        binding: 0,
-                        resource: uniform_buffer.as_entire_binding(),
-                    },
-                    BindGroupEntry {
-                        binding: 1,
-                        resource: cell_storage_buffers[1].as_entire_binding(),
-                    },
-                    BindGroupEntry {
-                        binding: 2,
-                        resource: cell_storage_buffers[0].as_entire_binding(),
-                    },
-                ],
-            }),
-        ];
+        // let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        //     label: Some("Uniform Buffer"),
+        //     contents: bytemuck::cast_slice(crate::primitives::UNIFORM_ARRAY),
+        //     usage: wgpu::BufferUsages::UNIFORM,
+        // });
 
         let render_ctx = RenderContext::new(
             surface,
@@ -316,12 +167,11 @@ impl<'a> App<'a> {
             config,
             size,
             render_pipeline,
-            compute_pipeline,
-            vertex_buffer,
-            index_buffer,
-            uniform_buffer,
-            cell_storage_buffers,
-            bind_groups,
+            Some(vertex_buffer),
+            None,
+            None,
+            None,
+            std::mem::take(&mut self.render_state).unwrap(),
         );
         self.render_ctx = Some(render_ctx);
     }
@@ -332,6 +182,7 @@ pub struct App<'a> {
     window_attributes: WindowAttributes,
     render_ctx: Option<RenderContext<'a>>,
     frame_time: Instant,
+    render_state: Option<RenderState>,
 }
 
 impl<'a> ApplicationHandler for App<'a> {

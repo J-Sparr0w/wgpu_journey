@@ -1,11 +1,46 @@
+use std::ops::{Add, Sub};
+
+#[derive(Debug, Clone, Copy)]
 pub struct Point2 {
-    x: f32,
-    y: f32,
+    pub x: f32,
+    pub y: f32,
+}
+
+impl<T: Into<f32>> Add<T> for Point2 {
+    type Output = Point2;
+
+    fn add(mut self, rhs: T) -> Self::Output {
+        let rhs: f32 = rhs.into();
+        self.x += rhs;
+        self.y += rhs;
+
+        self
+    }
+}
+
+impl<T: Into<f32>> Sub<T> for Point2 {
+    type Output = Point2;
+
+    fn sub(mut self, rhs: T) -> Self::Output {
+        let rhs: f32 = rhs.into();
+        self.x -= rhs;
+        self.y -= rhs;
+
+        self
+    }
 }
 
 impl Point2 {
     pub fn new(x: f32, y: f32) -> Point2 {
         Point2 { x, y }
+    }
+    pub fn add_to_x<T: Into<f32>>(mut self, rhs: T) -> Self {
+        self.x += rhs.into();
+        self
+    }
+    pub fn add_to_y<T: Into<f32>>(mut self, rhs: T) -> Self {
+        self.y += rhs.into();
+        self
     }
 }
 
