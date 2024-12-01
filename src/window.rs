@@ -336,7 +336,7 @@ pub struct App<'a> {
 
 impl<'a> ApplicationHandler for App<'a> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        eprintln!("Resumed");
+        // eprintln!("Resumed");
         let window_attributes = self.window_attributes.clone();
         self.window = Some(Arc::new(
             event_loop.create_window(window_attributes).unwrap(),

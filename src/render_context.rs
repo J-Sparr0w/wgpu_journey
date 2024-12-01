@@ -68,7 +68,7 @@ impl<'a> RenderContext<'a> {
 
     pub fn render(&mut self) {
         self.step = (self.step + 1) % 2;
-        dbg!(self.step);
+        // dbg!(self.step);
         let curr_surface_texture = self.surface.get_current_texture().unwrap();
         let surface_texture_view = curr_surface_texture
             .texture

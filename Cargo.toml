@@ -1,18 +1,15 @@
 [package]
+edition = "2021"
 name = "wgpu_learn_02"
 version = "0.1.0"
-edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 
 [profile.dev]
 opt-level = 1
 
 [profile.dev.package."*"]
 opt-level = 3
-
-
 
 # Enable more optimization in the release profile at the cost of compile time.
 [profile.release]
@@ -25,12 +22,10 @@ codegen-units = 1
 # Slows compile times, marginal improvements.
 lto = "thin"
 
-
-
 [dependencies]
 bytemuck = "1.20.0"
 env_logger = "0.11.3"
 pollster = "0.4.0"
 rand = "0.8.5"
 wgpu = "0.20.1"
-winit = { version = "0.30.3", features = ["rwh_05"] }
+winit = {version = "0.30.3", features = ["rwh_05"]}
